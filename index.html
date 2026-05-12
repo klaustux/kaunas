@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kauno vietos aplankyti</title>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+  crossorigin=""
+/>
+<style>
+  :root {
+    --bg: #fafafa;
+    --panel: #ffffffee;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); }
+  #map { position: absolute; inset: 0; }
+
+  .panel {
+    position: absolute;
+    background: var(--panel);
+    backdrop-filter: blur(6px);
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    padding: 12px 14px;
+    z-index: 500;
+    font-size: 14px;
+  }
+  .panel h2 { margin: 0 0 8px; font-size: 15px; }
+
+  #title-panel { top: 12px; left: 60px; max-width: 340px; }
+  #title-panel .row { display: flex; align-items: center; gap: 10px; }
+  #title-panel h1 { margin: 0; font-size: 16px; font-weight: 600; flex: 1; }
+  #title-panel .sub { font-size: 12px; color: #666; margin-top: 2px; }
+
+  .lang-toggle { display: inline-flex; gap: 0; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; }
+  .lang-toggle button {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border: none;
+    background: #fff;
+    cursor: pointer;
+    color: #555;
+  }
+  .lang-toggle button.active { background: #333; color: #fff; }
+  .lang-toggle button:not(.active):hover { background: #f0f0f0; }
+
+  #filter-panel {
+    top: 12px;
+    right: 12px;
+    min-width: 220px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+  #filter-panel .filter-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; user-select: none; }
+  #filter-panel .filter-row input { margin: 0; }
+  #filter-panel .filter-row .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid #fff; box-shadow: 0 0 0 1px #00000033; }
+  #filter-panel .filter-row .emoji { font-size: 14px; line-height: 1; }
+  #filter-panel .filter-row .label { flex: 1; }
+  #filter-panel .filter-row .code {
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: #999;
+    background: #f0f0f0;
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-right: 4px;
+  }
+  #filter-panel .filter-row .count { font-size: 11px; color: #666; font-variant-numeric: tabular-nums; }
+  #filter-panel .quick { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; }
+  #filter-panel .quick button {
+    flex: 1; font-size: 11px; padding: 3px 6px;
+    background: #fff; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;
+  }
+  #filter-panel .quick button:hover { background: #f0f0f0; }
+  #filter-panel .lbl-toggle { display: flex; align-items: center; gap: 8px; padding: 6px 0 0; margin-top: 6px; border-top: 1px solid #eee; cursor: pointer; }
+
+  #action-panel { bottom: 24px; right: 12px; display: flex; flex-direction: column; gap: 6px; }
+  #action-panel button {
+    background: white; border: 1px solid #ccc; padding: 7px 12px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; text-align: left;
+  }
+  #action-panel button:hover { background: #f0f0f0; }
+  #action-panel button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Marker */
+  .marker-wrap { background: transparent; border: none; }
+  .cat-marker {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #888;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .marker-label {
+    position: absolute;
+    left: 50%;
+    top: 32px;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.92);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    pointer-events: none;
+    color: #222;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Popup */
+  .leaflet-popup-content-wrapper { border-radius: 8px; }
+  .leaflet-popup-content { margin: 10px 12px; min-width: 220px; max-width: 280px; }
+  .popup-card .photo {
+    width: calc(100% + 24px);
+    margin: -10px -12px 8px -12px;
+    height: 160px;
+    object-fit: cover;
+    display: block;
+    border-radius: 8px 8px 0 0;
+    background: #eee;
+  }
+  .popup-card .photo-broken {
+    display: none;
+  }
+  .popup-card .name { font-weight: 600; font-size: 15px; line-height: 1.25; }
+  .popup-card .name-en { font-size: 12px; color: #666; font-style: italic; line-height: 1.2; margin-top: 1px; }
+  .popup-card .notes-en { margin-top: 4px; font-size: 12px; color: #666; font-style: italic; line-height: 1.35; }
+  .popup-card .cat-badge, .popup-card .prio-badge {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #fff;
+    margin-top: 6px;
+    margin-right: 4px;
+    font-weight: 600;
+  }
+  .popup-card .hours { margin-top: 8px; font-size: 13px; }
+  .popup-card .hours .lbl { color: #666; font-size: 11px; }
+  .popup-card .notes { margin-top: 6px; font-size: 13px; color: #333; line-height: 1.35; }
+  .popup-card .coords { font-size: 11px; color: #999; margin-top: 8px; font-family: ui-monospace, monospace; }
+
+  #toast {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222; color: #fff;
+    padding: 8px 14px; border-radius: 6px;
+    font-size: 13px; z-index: 1000;
+    opacity: 0; transition: opacity 0.25s;
+    pointer-events: none; max-width: 80%;
+  }
+  #toast.show { opacity: 1; }
+  #toast.error { background: #b00; }
+
+  .status-live { color: #080; }
+  .status-cache { color: #b80; }
+  .status-seed { color: #b00; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="panel" id="title-panel">
+  <div class="row">
+    <h1 id="title-text">Kauno vietos aplankyti</h1>
+    <div class="lang-toggle">
+      <button data-lang="lt" class="active">LT</button>
+      <button data-lang="en">EN</button>
+    </div>
+  </div>
+  <div class="sub" id="updated-info">Kraunama…</div>
+</div>
+
+<div class="panel" id="filter-panel">
+  <h2 id="filter-heading">Kategorijos</h2>
+  <div id="filter-list"></div>
+  <div class="quick">
+    <button id="select-all">Visi</button>
+    <button id="select-none">Nė vienas</button>
+  </div>
+  <label class="lbl-toggle">
+    <input type="checkbox" id="f-labels" checked />
+    <span id="lbl-show-names">Rodyti pavadinimus</span>
+  </label>
+</div>
+
+<div id="action-panel" class="panel">
+  <button id="reload">↻ Atnaujinti</button>
+  <button id="export-csv">Eksportuoti CSV</button>
+</div>
+
+<div id="toast"></div>
+
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+  crossorigin=""
+></script>
+<script>
+"use strict";
+
+/* ===== Config ===== */
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTOIbvvF50Gb-g3KTO281YCJjYh4lhNInXWIOZb-tFCHqOwzaSmiffZhpss3sYLOkTVSAc47ArRElr8/pub?gid=586090156&single=true&output=csv";
+const CACHE_KEY = "kauno-vietos-cache-v2";
+const LANG_KEY = "kauno-vietos-lang";
+
+/* ===== Translations ===== */
+const TRANSLATIONS = {
+  lt: {
+    title: "Kauno vietos aplankyti",
+    loading: "Kraunama…",
+    categories: "Kategorijos",
+    selectAll: "Visi",
+    selectNone: "Nė vienas",
+    showNames: "Rodyti pavadinimus",
+    reload: "↻ Atnaujinti",
+    exportCsv: "Eksportuoti CSV",
+    fromSheets: "Iš Google Sheets",
+    fromCache: "Iš cache",
+    seedData: "Pradinis sąrašas",
+    sheetUnreachable: "Sheet nepasiekiamas — rodomi pradiniai duomenys",
+    sheetUnreachableShort: "Sheet nepasiekiamas",
+    error: "Klaida",
+    hoursLabel: "Darbo laikas",
+    coordsToVerify: "(patikslint)",
+    prio: { 1: "Būtina", 2: "Rekomenduojama", 3: "Jei lieka laiko" },
+    places: "vietos",
+    justNow: "ką tik",
+    minAgo: n => `prieš ${n} min`,
+    hAgo: n => `prieš ${n} val`,
+    dAgo: n => `prieš ${n} d`,
+    csvSaved: "CSV išsaugotas",
+    dataRefreshed: "Duomenys atnaujinti",
+    fetchFailed: "Nepavyko gauti Sheet'o",
+    categoryLabels: {
+      senamiestis: "Senamiestis", "bažnyčia": "Bažnyčia", muziejus: "Muziejus",
+      maistas: "Maistas", parkas: "Parkas", centras: "Centras", atrakcija: "Atrakcija",
+      "apžvalga": "Apžvalga", "kultūra": "Kultūra", "architektūra": "Architektūra",
+      pramogos: "Pramogos", modernizmas: "Modernizmas", other: "Kita",
+    },
+  },
+  en: {
+    title: "Kaunas Places to Visit",
+    loading: "Loading…",
+    categories: "Categories",
+    selectAll: "All",
+    selectNone: "None",
+    showNames: "Show names",
+    reload: "↻ Reload",
+    exportCsv: "Export CSV",
+    fromSheets: "From Google Sheets",
+    fromCache: "From cache",
+    seedData: "Default list",
+    sheetUnreachable: "Sheet unreachable — showing default data",
+    sheetUnreachableShort: "Sheet unreachable",
+    error: "Error",
+    hoursLabel: "Hours",
+    coordsToVerify: "(verify coords)",
+    prio: { 1: "Must-see", 2: "Recommended", 3: "If time permits" },
+    places: "places",
+    justNow: "just now",
+    minAgo: n => `${n} min ago`,
+    hAgo: n => `${n} h ago`,
+    dAgo: n => `${n} d ago`,
+    csvSaved: "CSV saved",
+    dataRefreshed: "Data refreshed",
+    fetchFailed: "Failed to fetch Sheet",
+    categoryLabels: {
+      senamiestis: "Old Town", "bažnyčia": "Church", muziejus: "Museum",
+      maistas: "Food", parkas: "Park", centras: "Center", atrakcija: "Attraction",
+      "apžvalga": "Viewpoint", "kultūra": "Culture", "architektūra": "Architecture",
+      pramogos: "Entertainment", modernizmas: "Modernism", other: "Other",
+    },
+  },
+};
+
+let currentLang = localStorage.getItem(LANG_KEY) || "lt";
+function t(key, ...args) {
+  const v = TRANSLATIONS[currentLang][key];
+  return typeof v === "function" ? v(...args) : v;
+}
+
+/* ===== Category definitions (labels come from translations) ===== */
+const CATEGORIES = {
+  senamiestis:    { color: "#a67c52", emoji: "🏘️" },
+  "bažnyčia":     { color: "#6b4f8a", emoji: "⛪" },
+  muziejus:       { color: "#c93838", emoji: "🖼️" },
+  maistas:        { color: "#ff5722", emoji: "🍽️" },
+  parkas:         { color: "#4caf50", emoji: "🌳" },
+  centras:        { color: "#ff9800", emoji: "🏙️" },
+  atrakcija:      { color: "#e91e63", emoji: "🎢" },
+  "apžvalga":     { color: "#03a9f4", emoji: "🔭" },
+  "kultūra":      { color: "#9c27b0", emoji: "🎭" },
+  "architektūra": { color: "#607d8b", emoji: "🏰" },
+  pramogos:       { color: "#ffc107", emoji: "🎪" },
+  modernizmas:    { color: "#455a64", emoji: "🏢" },
+  other:          { color: "#888888", emoji: "📍" },
+};
+
+/* Short-code → category. Aliases included for back-compat. */
+const CATEGORY_CODES = {
+  s: "senamiestis",
+  b: "bažnyčia",
+  m: "muziejus",
+  mu: "muziejus",        // alias
+  niam: "maistas",
+  ma: "maistas",         // alias
+  mo: "modernizmas",
+  p: "parkas",
+  pa: "parkas",          // alias
+  pr: "pramogos",
+  c: "centras",
+  v: "apžvalga",
+  ap: "apžvalga",        // alias
+  at: "atrakcija",
+  a: "architektūra",
+  ar: "architektūra",    // alias
+  k: "kultūra",
+};
+
+/* Which code to display in the filter panel (one per category) */
+const PRIMARY_CODES = {
+  senamiestis: "s",
+  "bažnyčia": "b",
+  muziejus: "m",
+  maistas: "niam",
+  modernizmas: "mo",
+  parkas: "p",
+  pramogos: "pr",
+  centras: "c",
+  "apžvalga": "v",
+  atrakcija: "at",
+  "architektūra": "a",
+  "kultūra": "k",
+};
+
+/* ===== Fallback seed (10 esmių, LT + EN) ===== */
+const SEED = [
+  ["Kauno pilis", "Kaunas Castle", 54.8989, 23.8850, "senamiestis", "II–VII 10:00–18:00", "XIV a. pilies griuvėsiai, muziejus viduje", "14th c. castle ruins with a museum inside", 1],
+  ["Rotušės aikštė", "Town Hall Square", 54.8967, 23.8868, "senamiestis", "Visada", "Senamiesčio širdis, „Balta gulbė\" — buvusi rotušė", "Heart of the Old Town, the “White Swan” town hall", 1],
+  ["Laisvės alėja", "Liberty Avenue", 54.8972, 23.9136, "centras", "Visada", "1.6 km pėsčiųjų alėja — ilgiausia Rytų Europoje", "1.6 km pedestrian boulevard — longest in Eastern Europe", 1],
+  ["Aleksoto apžvalgos aikštelė", "Aleksotas Observation Point", 54.8908, 23.8866, "apžvalga", "Visada", "V. Čepinskio g. 5 — panorama į senamiestį", "V. Čepinskio g. 5 — panoramic view of Old Town", 1],
+  ["Šv. Petro ir Povilo arkikatedra bazilika", "St. Peter & Paul's Cathedral Basilica", 54.8972, 23.8889, "bažnyčia", "Kasdien 7:00–19:00", "Vilniaus g. 1, gotikinė XV a. katedra", "Vilniaus g. 1, Gothic 15th c. cathedral", 2],
+  ["Vytauto Didžiojo bažnyčia", "Vytautas the Great Church", 54.8950, 23.8868, "bažnyčia", "Kasdien", "Aleksoto g. 3, ant Nemuno kranto", "Aleksoto g. 3, on the bank of the Nemunas", 2],
+  ["M. K. Čiurlionio dailės muziejus", "M. K. Čiurlionis Art Museum", 54.9008, 23.9210, "muziejus", "II,V,VI,VII 10–18; III,IV 11–19 (I uždarytas)", "V. Putvinskio g. 55 (koord. patikslint)", "V. Putvinskio g. 55 (verify coords). Largest Čiurlionis collection in the world", 2],
+  ["Sugiharos namai", "Sugihara House", 54.9036, 23.9220, "muziejus", "V–X: I–V 10–17, VI–VII 11–16; XI–IV: I–V 11–15", "Vaižganto g. 30 — japonų diplomato, gelbėjusio žydus, namai (koord. patikslint)", "Vaižganto g. 30 — home of the Japanese diplomat who saved Jews (verify coords)", 2],
+  ["Kristaus Prisikėlimo bazilika", "Resurrection of Christ Basilica", 54.9025, 23.9169, "bažnyčia", "Kasdien", "Žemaičių g. 31a, stogo terasa su vaizdu", "Žemaičių g. 31a, rooftop terrace with views", 3],
+  ["Pažaislio vienuolynas", "Pažaislis Monastery", 54.8767, 24.0222, "architektūra", "II–VII 10:00–17:00", "Italų baroko šedevras prie Kauno marių", "Italian Baroque masterpiece by Kaunas Lagoon", 3],
+].map(([name, nameEn, lat, lng, category, hours, notes, notesEn, priority]) => ({ name, nameEn, lat, lng, category, hours, notes, notesEn, priority }));
+
+let state = SEED;
+let activeCategories = new Set(); // populated after first render
+
+/* ===== Map ===== */
+const map = L.map("map").setView([54.902, 23.93], 13);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  maxZoom: 19,
+}).addTo(map);
+
+/* ===== Helpers ===== */
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function normPriority(raw) {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (v === "1" || v === "a" || v.startsWith("aukst") || v.startsWith("aukšt") || v.startsWith("but") || v.startsWith("būt")) return 1;
+  if (v === "3" || v === "c" || v.startsWith("zem") || v.startsWith("žem") || v.startsWith("low")) return 3;
+  if (v === "2" || v === "b" || v.startsWith("vidut")) return 2;
+  return 2; // default
+}
+
+function normCategory(raw) {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (!v) return "other";
+  // Short code (1-2 letters)
+  if (CATEGORY_CODES[v]) return CATEGORY_CODES[v];
+  // Direct match
+  if (CATEGORIES[v]) return v;
+  // Stripped diacritics match
+  const stripped = v.replace(/[ąčęėįšųūž]/g, c => ({"ą":"a","č":"c","ę":"e","ė":"e","į":"i","š":"s","ų":"u","ū":"u","ž":"z"}[c]));
+  for (const key of Object.keys(CATEGORIES)) {
+    const keyStripped = key.replace(/[ąčęėįšųūž]/g, c => ({"ą":"a","č":"c","ę":"e","ė":"e","į":"i","š":"s","ų":"u","ū":"u","ž":"z"}[c]));
+    if (keyStripped === stripped) return key;
+  }
+  // English synonyms
+  const eng = {
+    "old town": "senamiestis", "church": "bažnyčia", "museum": "muziejus",
+    "food": "maistas", "restaurant": "maistas",
+    "park": "parkas", "center": "centras", "attraction": "atrakcija",
+    "viewpoint": "apžvalga", "culture": "kultūra", "architecture": "architektūra",
+    "entertainment": "pramogos", "modernism": "modernizmas",
+  };
+  if (eng[v]) return eng[v];
+  return "other";
+}
+
+function getCatDef(cat) {
+  const c = CATEGORIES[cat] || CATEGORIES.other;
+  const labels = t("categoryLabels");
+  return {
+    label: labels[cat] || labels.other,
+    color: c.color,
+    emoji: c.emoji,
+  };
+}
+
+function parseCsv(text) {
+  const rawLines = text.replace(/\r\n?/g, "\n").split("\n").filter(l => l.trim().length);
+  if (!rawLines.length) return [];
+
+  function tokenize(line) {
+    const out = [];
+    let cur = "", q = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q) {
+        if (c === '"') {
+          if (line[i+1] === '"') { cur += '"'; i++; }
+          else q = false;
+        } else cur += c;
+      } else {
+        if (c === '"') q = true;
+        else if (c === ",") { out.push(cur); cur = ""; }
+        else cur += c;
+      }
+    }
+    out.push(cur);
+    return out;
+  }
+
+  // Detect "row-wrapped" CSV: every line is a single quoted field with commas inside.
+  // Some Google Sheets publish configurations emit this. Unwrap by tokenizing inner content.
+  let lines = rawLines;
+  const headerProbe = tokenize(rawLines[0]);
+  if (headerProbe.length === 1 && headerProbe[0].includes(",")) {
+    console.warn("CSV appears row-wrapped, unwrapping each line");
+    lines = rawLines.map(l => tokenize(l).join(","));
+    // Now each line should be the inner CSV content
+  }
+
+  const header = tokenize(lines.shift()).map(s => s.trim().toLowerCase());
+  let iName = header.findIndex(c => c.startsWith("pavad") || c.startsWith("vard") || c === "name" || c.startsWith("vieta"));
+  let iLat = header.findIndex(c => c === "lat" || c === "latitude" || c.startsWith("plat"));
+  let iLng = header.findIndex(c => c === "lng" || c === "lon" || c === "long" || c === "longitude" || c.startsWith("ilg"));
+  let iCat = header.findIndex(c => c.startsWith("kateg") || c === "category" || c.startsWith("tipas"));
+  let iHours = header.findIndex(c => c.startsWith("darbo") || c === "hours" || c.startsWith("valandos"));
+  let iPhoto = header.findIndex(c => c.startsWith("nuotrauk") || c === "photo" || c === "image" || c.startsWith("paveiksl") || c === "pic");
+  let iNotes = header.findIndex(c =>
+    !c.endsWith("_en") &&
+    (c.startsWith("past") || c === "notes" || c.startsWith("apras") || c.startsWith("apraš"))
+  );
+  let iPrio = header.findIndex(c => c.startsWith("priorit") || c === "priority");
+  let iNameEn = header.findIndex(c => c === "pavadinimas_en" || c === "name_en" || c === "name (en)" || c === "vardas_en");
+  let iNotesEn = header.findIndex(c =>
+    c.endsWith("_en") &&
+    c !== "pavadinimas_en" && c !== "name_en" && c !== "vardas_en"
+  );
+
+  // Positional fallback for lat/lng if missing
+  if (iName >= 0 && iLat === -1 && iLng === -1) {
+    iLat = iName + 1;
+    iLng = iName + 2;
+    if (iCat === -1) iCat = iName + 3;
+    if (iHours === -1) iHours = iName + 4;
+    if (iNotes === -1) iNotes = iName + 5;
+    if (iPrio === -1) iPrio = iName + 6;
+  }
+
+  if (iName === -1) throw new Error("Nerasta pavadinimo stulpelio antraštė");
+
+  const rows = [];
+  for (const line of lines) {
+    const cells = tokenize(line);
+    const name = (cells[iName] || "").trim();
+    const lat = parseFloat(cells[iLat]);
+    const lng = parseFloat(cells[iLng]);
+    if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    rows.push({
+      name,
+      nameEn: iNameEn >= 0 ? (cells[iNameEn] || "").trim() : "",
+      lat,
+      lng,
+      category: iCat >= 0 ? normCategory(cells[iCat]) : "other",
+      hours: iHours >= 0 ? (cells[iHours] || "").trim() : "",
+      notes: iNotes >= 0 ? (cells[iNotes] || "").trim() : "",
+      notesEn: iNotesEn >= 0 ? (cells[iNotesEn] || "").trim() : "",
+      photo: iPhoto >= 0 ? (cells[iPhoto] || "").trim() : "",
+      priority: iPrio >= 0 ? normPriority(cells[iPrio]) : 2,
+    });
+  }
+  return rows;
+}
+
+async function fetchSheet() {
+  const res = await fetch(SHEET_CSV_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const text = await res.text();
+  const data = parseCsv(text);
+  if (!data.length) throw new Error("Sheet'as tuščias arba blogo formato");
+  return data;
+}
+
+function readCache() {
+  try { const raw = localStorage.getItem(CACHE_KEY); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function writeCache(data) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch (e) {}
+}
+
+function formatAgo(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return t("justNow");
+  if (m < 60) return t("minAgo", m);
+  const h = Math.floor(m / 60);
+  if (h < 24) return t("hAgo", h);
+  return t("dAgo", Math.floor(h / 24));
+}
+
+/* ===== Markers ===== */
+const markers = [];
+
+function makeIcon(category, priority, name, showLabel) {
+  const def = getCatDef(category);
+  const size = priority === 1 ? 42 : priority === 3 ? 24 : 32;
+  const fontSize = priority === 1 ? 22 : priority === 3 ? 14 : 18;
+  const label = showLabel
+    ? `<div class="marker-label" style="top:${size}px">${escapeHtml(name)}</div>`
+    : "";
+  return L.divIcon({
+    html: `<div class="cat-marker" style="background:${def.color};width:${size}px;height:${size}px;font-size:${fontSize}px">${def.emoji}</div>${label}`,
+    className: "marker-wrap",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+  });
+}
+
+function popupHtml(p) {
+  const def = getCatDef(p.category);
+  const prioColor = p.priority === 1 ? "#c93838" : p.priority === 3 ? "#9aa" : "#888";
+  const prioLabel = `${p.priority} · ${t("prio")[p.priority]}`;
+
+  // Pick primary/secondary names based on current language
+  const primaryName = (currentLang === "en" && p.nameEn) ? p.nameEn : p.name;
+  const secondaryName = (currentLang === "en" && p.nameEn) ? p.name : p.nameEn;
+  const primaryNotes = (currentLang === "en" && p.notesEn) ? p.notesEn : p.notes;
+  const secondaryNotes = (currentLang === "en" && p.notesEn) ? p.notes : p.notesEn;
+
+  const photoHtml = p.photo
+    ? `<img class="photo" src="${escapeHtml(p.photo)}" alt="${escapeHtml(primaryName)}" onerror="this.classList.add('photo-broken')" />`
+    : "";
+  const nameSecondaryHtml = secondaryName
+    ? `<div class="name-en">${escapeHtml(secondaryName)}</div>`
+    : "";
+  const hoursHtml = p.hours
+    ? `<div class="hours"><span class="lbl">${escapeHtml(t("hoursLabel"))}:</span> ${escapeHtml(p.hours)}</div>`
+    : "";
+  const notesHtml = primaryNotes
+    ? `<div class="notes">${escapeHtml(primaryNotes)}</div>`
+    : "";
+  const notesSecondaryHtml = secondaryNotes && secondaryNotes !== primaryNotes
+    ? `<div class="notes-en">${escapeHtml(secondaryNotes)}</div>`
+    : "";
+  return `
+    <div class="popup-card">
+      ${photoHtml}
+      <div class="name">${escapeHtml(primaryName)}</div>
+      ${nameSecondaryHtml}
+      <span class="cat-badge" style="background:${def.color}">${def.emoji} ${escapeHtml(def.label)}</span>
+      <span class="prio-badge" style="background:${prioColor}">${escapeHtml(prioLabel)}</span>
+      ${hoursHtml}
+      ${notesHtml}
+      ${notesSecondaryHtml}
+      <div class="coords">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
+    </div>
+  `;
+}
+
+function renderMarkers() {
+  const showLabel = document.getElementById("f-labels").checked;
+  for (const m of markers) map.removeLayer(m);
+  markers.length = 0;
+  for (const p of state) {
+    if (!activeCategories.has(p.category)) continue;
+    const labelName = (currentLang === "en" && p.nameEn) ? p.nameEn : p.name;
+    const m = L.marker([p.lat, p.lng], { icon: makeIcon(p.category, p.priority, labelName, showLabel) });
+    m.bindPopup(popupHtml(p));
+    m.addTo(map);
+    markers.push(m);
+  }
+}
+
+/* ===== Filter panel ===== */
+function buildFilterPanel() {
+  const counts = {};
+  for (const p of state) counts[p.category] = (counts[p.category] || 0) + 1;
+
+  // Show only categories present in data, sorted by count desc
+  const cats = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+
+  // Initialize activeCategories on first build (all on). On rebuilds, preserve user selection.
+  if (activeCategories.size === 0) {
+    cats.forEach(c => activeCategories.add(c));
+  }
+
+  const list = document.getElementById("filter-list");
+  list.innerHTML = cats.map(c => {
+    const def = getCatDef(c);
+    const checked = activeCategories.has(c) ? "checked" : "";
+    const code = PRIMARY_CODES[c];
+    const codeHtml = code ? `<span class="code" title="Sheet'e gali rašyt &quot;${code}&quot;">${code}</span>` : "";
+    return `
+      <label class="filter-row">
+        <input type="checkbox" data-cat="${escapeHtml(c)}" ${checked} />
+        <span class="dot" style="background:${def.color}"></span>
+        <span class="emoji">${def.emoji}</span>
+        <span class="label">${escapeHtml(def.label)}</span>
+        ${codeHtml}
+        <span class="count">${counts[c]}</span>
+      </label>
+    `;
+  }).join("");
+
+  list.querySelectorAll("input[type=checkbox]").forEach(cb => {
+    cb.addEventListener("change", e => {
+      const cat = e.target.dataset.cat;
+      if (e.target.checked) activeCategories.add(cat);
+      else activeCategories.delete(cat);
+      renderMarkers();
+    });
+  });
+}
+
+/* ===== Status ===== */
+let lastStatus = null; // { source: "live"|"cache"|"seed"|"error", ts, error }
+
+function setStatus(source, ts) {
+  lastStatus = { source, ts };
+  renderStatus();
+}
+
+function setStatusError(err) {
+  lastStatus = { source: "error", error: err };
+  renderStatus();
+}
+
+function renderStatus() {
+  if (!lastStatus) return;
+  const el = document.getElementById("updated-info");
+  const count = state.length;
+  const { source, ts, error } = lastStatus;
+  if (source === "live") {
+    el.innerHTML = `<span class="status-live">● ${escapeHtml(t("fromSheets"))}</span> · ${count} ${escapeHtml(t("places"))} · ${formatAgo(ts)}`;
+  } else if (source === "cache") {
+    el.innerHTML = `<span class="status-cache">● ${escapeHtml(t("fromCache"))}</span> (${formatAgo(ts)}) · ${count} ${escapeHtml(t("places"))} — ${escapeHtml(t("sheetUnreachableShort"))}`;
+  } else if (source === "error") {
+    el.innerHTML = `<span class="status-seed">● ${escapeHtml(t("sheetUnreachableShort"))}</span> — ${escapeHtml(t("seedData").toLowerCase())}<br><span style="font-size:11px;color:#b00">${escapeHtml(t("error"))}: ${escapeHtml(error.message)}</span>`;
+  } else {
+    el.innerHTML = `<span class="status-seed">● ${escapeHtml(t("seedData"))}</span> · ${count} ${escapeHtml(t("places"))}`;
+  }
+}
+
+/* ===== Load flow ===== */
+async function load(forceFresh) {
+  document.getElementById("reload").disabled = true;
+  document.getElementById("updated-info").textContent = t("loading");
+
+  const cached = readCache();
+  if (cached && !forceFresh) {
+    state = cached.data;
+    buildFilterPanel();
+    setStatus("cache", cached.ts);
+    renderMarkers();
+  }
+
+  try {
+    const data = await fetchSheet();
+    state = data;
+    writeCache(data);
+    buildFilterPanel();
+    setStatus("live", Date.now());
+    renderMarkers();
+    if (forceFresh) toast(t("dataRefreshed"));
+  } catch (e) {
+    console.error("Sheet load error:", e);
+    if (cached) {
+      toast(t("fetchFailed") + ": " + e.message, true);
+    } else {
+      state = SEED;
+      buildFilterPanel();
+      setStatusError(e);
+      renderMarkers();
+    }
+  } finally {
+    document.getElementById("reload").disabled = false;
+  }
+}
+
+/* ===== Toast ===== */
+function toast(msg, error) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.toggle("error", !!error);
+  t.classList.add("show");
+  clearTimeout(toast._h);
+  toast._h = setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+/* ===== Quick filter buttons ===== */
+document.getElementById("select-all").addEventListener("click", () => {
+  document.querySelectorAll("#filter-list input[type=checkbox]").forEach(cb => {
+    cb.checked = true;
+    activeCategories.add(cb.dataset.cat);
+  });
+  renderMarkers();
+});
+document.getElementById("select-none").addEventListener("click", () => {
+  document.querySelectorAll("#filter-list input[type=checkbox]").forEach(cb => {
+    cb.checked = false;
+    activeCategories.delete(cb.dataset.cat);
+  });
+  renderMarkers();
+});
+document.getElementById("f-labels").addEventListener("change", renderMarkers);
+
+/* ===== CSV export ===== */
+function toCsv() {
+  const header = "pavadinimas,pavadinimas_en,lat,lng,kategorija,darbo laikas,pastabos,aprašymas_en,nuotrauka,prioritetas";
+  const rows = state.map(p =>
+    [p.name, p.nameEn, p.lat, p.lng, p.category, p.hours, p.notes, p.notesEn, p.photo, p.priority]
+      .map(v => {
+        const s = String(v ?? "");
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(",")
+  );
+  return [header, ...rows].join("\n");
+}
+document.getElementById("export-csv").addEventListener("click", () => {
+  const blob = new Blob([toCsv()], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "kauno-vietos.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(t("csvSaved"));
+});
+
+document.getElementById("reload").addEventListener("click", () => load(true));
+
+/* ===== Language toggle ===== */
+function applyTranslations() {
+  document.title = t("title");
+  document.getElementById("title-text").textContent = t("title");
+  document.getElementById("filter-heading").textContent = t("categories");
+  document.getElementById("select-all").textContent = t("selectAll");
+  document.getElementById("select-none").textContent = t("selectNone");
+  document.getElementById("lbl-show-names").textContent = t("showNames");
+  document.getElementById("reload").textContent = t("reload");
+  document.getElementById("export-csv").textContent = t("exportCsv");
+  // Active button state
+  document.querySelectorAll(".lang-toggle button").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.lang === currentLang);
+  });
+  // Re-render dynamic content
+  renderStatus();
+  buildFilterPanel();
+  renderMarkers();
+}
+
+document.querySelectorAll(".lang-toggle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    currentLang = btn.dataset.lang;
+    localStorage.setItem(LANG_KEY, currentLang);
+    applyTranslations();
+  });
+});
+
+/* ===== Init ===== */
+applyTranslations();
+load(false);
+</script>
+</body>
+</html>
+
